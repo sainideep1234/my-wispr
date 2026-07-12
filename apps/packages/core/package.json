@@ -1,0 +1,40 @@
+{
+  "name": "wispr-core",
+  "version": "0.1.0",
+  "description": "Offline voice-to-text factory for Node.js — wraps whisper.cpp + PortAudio into a single EventEmitter-based API",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js",
+    "test": "node -e \"const { createWispr } = require('.'); console.log('OK — createWispr is', typeof createWispr);\""
+  },
+  "keywords": [
+    "speech-to-text",
+    "voice",
+    "dictation",
+    "whisper",
+    "whisper.cpp",
+    "offline",
+    "transcription",
+    "microphone",
+    "portaudio",
+    "naudiodon"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "naudiodon2p": "^2.6.0"
+  },
+  "peerDependencies": {},
+  "files": [
+    "src/",
+    "scripts/",
+    "README.md",
+    "LICENSE"
+  ]
+}
