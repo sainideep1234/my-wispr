@@ -53,6 +53,11 @@ export default function DocsPage() {
         </div>
       </div>
 
+      <h2 id="architecture" className="text-2xl font-bold text-foreground mt-12 mb-4">Architecture</h2>
+      <p className="text-muted-foreground mb-4 leading-relaxed">
+        <strong>my-wispr</strong> utilizes a high-performance, offline architecture. Audio is captured directly from the OS microphone using <code>portaudio</code> and buffered in an in-memory queue. A sliding window technique combines 20ms chunks into overlapping segments (e.g., 3-second windows with 1.5-second overlaps). These segments are then streamed to a spawned <code>whisper.cpp</code> engine process for rapid, real-time transcription without ever leaving your machine.
+      </p>
+
       <h2 id="factory" className="text-2xl font-bold text-foreground mt-12 mb-6">Configuration Reference</h2>
       
       <div className="overflow-x-auto rounded-lg border border-border">
@@ -103,6 +108,31 @@ export default function DocsPage() {
       <p className="text-sm text-muted-foreground mt-4 mb-10">
         You can also set the <code>WISPR_BIN</code> environment variable instead of passing <code>whisperBin</code> programmatically.
       </p>
+
+      <h2 id="events" className="text-2xl font-bold text-foreground mt-12 mb-6">Events</h2>
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-muted text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 font-medium">Event Name</th>
+              <th className="px-4 py-3 font-medium">Payload Type</th>
+              <th className="px-4 py-3 font-medium">Description</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border bg-card">
+            <tr>
+              <td className="px-4 py-3 font-mono text-primary">transcription</td>
+              <td className="px-4 py-3 text-muted-foreground">string</td>
+              <td className="px-4 py-3 text-foreground">Fired whenever a new transcription segment is successfully processed.</td>
+            </tr>
+            <tr>
+              <td className="px-4 py-3 font-mono text-primary">error</td>
+              <td className="px-4 py-3 text-muted-foreground">Error</td>
+              <td className="px-4 py-3 text-foreground">Fired when an error occurs during audio capture or transcription.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -17,24 +17,14 @@ export default function DocsLayout({
               <ul className="space-y-2 text-sm">
                 <li><Link href="/docs" className="text-primary font-medium">Quickstart</Link></li>
                 <li><Link href="#architecture" className="text-muted-foreground hover:text-foreground">Architecture</Link></li>
-                <li><Link href="#features" className="text-muted-foreground hover:text-foreground">Features</Link></li>
-              </ul>
-            </div>
-            
-            <div>
-              <h4 className="font-semibold text-foreground mb-3 text-sm tracking-tight">Core Concepts</h4>
-              <ul className="space-y-2 text-sm">
-                <li><Link href="#sliding-window" className="text-muted-foreground hover:text-foreground">Sliding Window</Link></li>
-                <li><Link href="#memory" className="text-muted-foreground hover:text-foreground">Memory Management</Link></li>
-                <li><Link href="#error-handling" className="text-muted-foreground hover:text-foreground">Error Handling</Link></li>
               </ul>
             </div>
             
             <div>
               <h4 className="font-semibold text-foreground mb-3 text-sm tracking-tight">API Reference</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link href="#factory" className="text-muted-foreground hover:text-foreground">Factory Configuration</Link></li>
-                <li><Link href="#methods" className="text-muted-foreground hover:text-foreground">Methods & Events</Link></li>
+                <li><Link href="#factory" className="text-muted-foreground hover:text-foreground">Configuration</Link></li>
+                <li><Link href="#events" className="text-muted-foreground hover:text-foreground">Events</Link></li>
               </ul>
             </div>
           </nav>
