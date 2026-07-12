@@ -1,159 +1,152 @@
-# Turborepo starter
+# my-wispr
 
-This Turborepo starter is maintained by the Turborepo core team.
+> High-performance offline speech-to-text for Node.js — powered by [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and PortAudio.
 
-## Using this example
+**No cloud. No API key. No data leaving your machine.**
 
-Run the following command:
+---
 
-```sh
-npx create-turbo@latest
+## What is this?
+
+`my-wispr` is a monorepo containing:
+
+| Package / App | Description |
+| --- | --- |
+| `apps/packages/core` | The `my-wispr-npm` Node.js library — publishable to npm |
+| `apps/frontend` | Documentation website (Next.js) |
+
+---
+
+## Using the NPM Package
+
+The easiest way to get started — just install it:
+
+```bash
+npm install my-wispr-npm
 ```
 
-## What's inside?
+Then in your project:
 
-This Turborepo includes the following packages/apps:
+```js
+const { createWispr } = require('my-wispr-npm');
 
-### Apps and Packages
+const wispr = createWispr({
+  onTranscription: (text) => console.log('[you said]', text),
+});
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+wispr.start();
 ```
 
-Without global `turbo`, use your package manager:
+> The install script auto-compiles `whisper.cpp` and downloads the model. No manual setup needed.
 
-```sh
-cd my-turborepo
-npx turbo build
-npm dlx turbo build
-npm exec turbo build
+See the [full package README](./apps/packages/core/README.md) for all options and events.
+
+---
+
+## Running Locally (Monorepo)
+
+### Prerequisites
+
+- Node.js >= 18
+- `git`, `make`, and a C++ compiler (macOS: `xcode-select --install`)
+
+### Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/sainideep1234/my-wispr.git
+cd my-wispr
+
+# Install all dependencies
+npm install
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### Run the frontend docs site
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+```bash
+cd apps/frontend
+npm run dev
 ```
 
-Without global `turbo`:
+Opens at [http://localhost:3000](http://localhost:3000).
 
-```sh
-npx turbo build --filter=docs
-npm exec turbo build --filter=docs
-npm exec turbo build --filter=docs
+### Test the core library locally
+
+```bash
+cd apps/packages/core
+
+# Quick smoke test
+npm test
+
+# Try it live
+node -e "
+const { createWispr } = require('.');
+const w = createWispr({ onTranscription: (t) => console.log(t) });
+w.start();
+setTimeout(() => w.stop(), 10000);
+"
 ```
 
-### Develop
+---
 
-To develop all apps and packages, run the following command:
+## Project Structure
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
+```
+my-wispr/
+├── apps/
+│   ├── frontend/          # Next.js docs site
+│   └── packages/
+│       └── core/          # my-wispr-npm package
+│           ├── src/
+│           │   └── index.js       # Core library
+│           ├── scripts/
+│           │   └── postinstall.js # Auto-setup whisper.cpp
+│           └── package.json
+└── README.md
 ```
 
-Without global `turbo`, use your package manager:
+---
 
-```sh
-cd my-turborepo
-npx turbo dev
-npm exec turbo dev
-npm exec turbo dev
+## How it Works
+
+```
+Microphone (PortAudio)
+    │  20ms PCM chunks
+    ▼
+  In-memory queue
+    │  when queue ≥ windowChunks (3s default)
+    ▼
+  WAV header + PCM piped via stdin
+    │
+    ▼
+  whisper.cpp binary
+    │
+    ▼
+  emit('transcription', text)
+    │  slide queue by stepChunks (1.5s default)
+    ▼
+  Repeat
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+**Key properties:**
+- **Zero temp files** — audio is piped directly to whisper's stdin
+- **Sliding window** — 50% overlap so no words are cut at boundaries
+- **Fully offline** — no network calls, ever
+- **Zero global state** — create multiple instances safely
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+---
 
-```sh
-turbo dev --filter=web
+## Publishing to NPM
+
+```bash
+cd apps/packages/core
+
+# Bump version in package.json first, then:
+npm publish
 ```
 
-Without global `turbo`:
+---
 
-```sh
-npx turbo dev --filter=web
-npm exec turbo dev --filter=web
-npm exec turbo dev --filter=web
-```
+## License
 
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-npm exec turbo login
-npm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-npm exec turbo link
-npm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+MIT

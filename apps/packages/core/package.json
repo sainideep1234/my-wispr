@@ -1,7 +1,7 @@
 {
-  "name": "wispr-core",
-  "version": "0.1.0",
-  "description": "Offline voice-to-text factory for Node.js — wraps whisper.cpp + PortAudio into a single EventEmitter-based API",
+  "name": "my-wispr-npm",
+  "version": "0.1.3",
+  "description": "Offline voice-to-text for Node.js — wraps whisper.cpp + PortAudio into a single EventEmitter-based API. No cloud, no API key.",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js"
@@ -20,17 +20,28 @@
     "transcription",
     "microphone",
     "portaudio",
-    "naudiodon"
+    "naudiodon",
+    "privacy",
+    "real-time",
+    "nodejs"
   ],
-  "author": "",
+  "author": "sainideep1234",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sainideep1234/my-wispr.git",
+    "directory": "apps/packages/core"
+  },
+  "homepage": "https://github.com/sainideep1234/my-wispr#readme",
+  "bugs": {
+    "url": "https://github.com/sainideep1234/my-wispr/issues"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
     "naudiodon2p": "^2.6.0"
   },
-  "peerDependencies": {},
   "files": [
     "src/",
     "scripts/",
