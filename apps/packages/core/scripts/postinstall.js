@@ -1,8 +1,12 @@
-const { execSync } = require('child_process');
-const { existsSync } = require('fs');
-const { join } = require('path');
+import { execSync } from 'child_process';
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-const whisperDirMonorepo = join(__dirname, '..', '..', '..', 'whisper.cpp');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const whisperDirMonorepo = join(__dirname, '..', '..', '..', '..', 'packages', 'whisper.cpp');
 const whisperDirStandalone = join(__dirname, '..', 'whisper.cpp');
 
 let whisperDir = whisperDirStandalone;

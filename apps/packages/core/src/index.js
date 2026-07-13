@@ -1,10 +1,12 @@
-'use strict';
+import EventEmitter from 'events';
+import { PassThrough } from 'stream';
+import { spawn } from 'child_process';
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
-const EventEmitter = require('events');
-const { PassThrough } = require('stream');
-const { spawn } = require('child_process');
-const { existsSync } = require('fs');
-const { join } = require('path');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const SAMPLE_RATE = 16000;
 const NUM_CHANNELS = 1;
@@ -36,13 +38,20 @@ function resolveWhisperPaths(opts) {
   const model = opts.model || 'base.en';
   const __pkgDir = join(__dirname, '..');
 
+  // Check if monorepo shared folder packages/whisper.cpp exists
+  const monorepoRootWhisper = join(__pkgDir, '..', '..', '..', 'packages', 'whisper.cpp');
+  let whisperDir = join(__pkgDir, 'whisper.cpp');
+  if (existsSync(monorepoRootWhisper)) {
+    whisperDir = monorepoRootWhisper;
+  }
+
   const resolvedBin =
-    opts.whisperBin || process.env.WISPR_BIN || join(__pkgDir, 'whisper.cpp', 'main');
+    opts.whisperBin || process.env.WISPR_BIN || join(whisperDir, 'main');
 
   const resolvedModel =
     opts.modelPath ||
     process.env.WISPR_MODEL ||
-    join(__pkgDir, 'whisper.cpp', 'models', 'ggml-' + model + '.bin');
+    join(whisperDir, 'models', 'ggml-' + model + '.bin');
 
   return { resolvedBin, resolvedModel };
 }
@@ -227,4 +236,4 @@ function createWisprStream(opts = {}) {
   };
 }
 
-module.exports = { createWisprStream };
+export { createWisprStream };

@@ -6,9 +6,10 @@
   "exports": {
     ".": "./src/index.js"
   },
+  "type": "module",
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
-    "test": "node -e \"const { createWisprStream } = require('.'); console.log('OK — createWisprStream is', typeof createWisprStream);\""
+    "test": "node -e \"import('./src/index.js').then(({ createWisprStream }) => console.log('OK — createWisprStream is', typeof createWisprStream));\""
   },
   "keywords": [
     "speech-to-text",

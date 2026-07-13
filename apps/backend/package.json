@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "predev": "node scripts/setup.js",
+    "dev": "node --watch --env-file=.env index.js"
   },
   "keywords": [
     "speech-to-text",
@@ -16,12 +17,13 @@
   ],
   "author": "sainideep1234",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
     "my-wispr-npm": "file:../packages/core",
+    "naudiodon2p": "^2.6.0",
     "ws": "^8.21.0"
   }
 }

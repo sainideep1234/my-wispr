@@ -1,96 +1,92 @@
-'use strict';
+import path, { dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
+import portAudio from 'naudiodon2p';
+import { createWisprStream } from 'my-wispr-npm';
 
-const http = require('http');
-const { WebSocketServer } = require('ws');
-const { PassThrough } = require('stream');
-const { createWisprStream } = require('my-wispr-npm');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-const PORT = process.env.PORT || 8080;
+const SAMPLE_RATE = 16000;
+const NUM_CHANNELS = 1;
 
-const server = http.createServer((req, res) => {
-  if (req.method === 'GET' && req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', service: 'my-wispr-server' }));
-    return;
-  }
-  res.writeHead(404);
-  res.end();
+// Resolve paths to whisper.cpp binary and model
+const monorepoRootWhisper = path.join(__dirname, '..', '..', 'packages', 'whisper.cpp');
+let whisperDir = path.join(__dirname, 'whisper.cpp');
+if (existsSync(monorepoRootWhisper)) {
+  whisperDir = monorepoRootWhisper;
+}
+
+const whisperBin = process.env.WISPR_BIN
+  ? path.resolve(__dirname, process.env.WISPR_BIN)
+  : path.join(whisperDir, 'main');
+
+const whisperModel = process.env.WISPR_MODEL
+  ? path.resolve(__dirname, process.env.WISPR_MODEL)
+  : path.join(
+      whisperDir,
+      'models',
+      `ggml-${process.env.WISPR_MODEL_NAME || 'base.en'}.bin`,
+    );
+
+// Setup PortAudio microphone stream (16kHz, 16-bit LE, mono)
+const pcmStream = new portAudio.AudioIO({
+  inOptions: {
+    channelCount: NUM_CHANNELS,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: SAMPLE_RATE,
+    deviceId: -1, // default device
+    closeOnError: true,
+  },
 });
 
-const wss = new WebSocketServer({ server });
+const windowChunks = process.env.WISPR_WINDOW_CHUNKS
+  ? parseInt(process.env.WISPR_WINDOW_CHUNKS, 10)
+  : 150;
 
-wss.on('connection', (ws, req) => {
-  const clientId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
-  console.log(`[my-wispr-server] Client connected: ${clientId}`);
+const stepChunks = process.env.WISPR_STEP_CHUNKS
+  ? parseInt(process.env.WISPR_STEP_CHUNKS, 10)
+  : 50;
 
-  const pcmStream = new PassThrough();
+const wispr = createWisprStream({
+  stream: pcmStream,
+  model: process.env.WISPR_MODEL_NAME || 'base.en',
+  windowChunks,
+  stepChunks,
+  whisperBin,
+  modelPath: whisperModel,
+});
 
-  const wispr = createWisprStream({
-    stream: pcmStream,
-    model: process.env.WISPR_MODEL_NAME || 'base.en',
-    windowChunks: 2,
-    stepChunks: 1,
-  });
-
-  wispr.on('transcription', (text) => {
-    console.log(`[${clientId}] → ${text}`);
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: 'transcription', text }));
-    }
-  });
-
-  wispr.on('error', (err) => {
-    console.error(`[${clientId}] Wispr error:`, err.message);
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: 'error', message: err.message }));
-    }
-  });
-
-  wispr.on('start', () => {
-    console.log(`[${clientId}] Transcription started`);
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: 'ready' }));
-    }
-  });
-
-  ws.on('message', (data) => {
-    if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
-      pcmStream.write(Buffer.from(data));
-    }
-  });
-
-  ws.on('close', () => {
-    console.log(`[my-wispr-server] Client disconnected: ${clientId}`);
-    wispr.stop();
-    pcmStream.destroy();
-  });
-
-  ws.on('error', (err) => {
-    console.error(`[my-wispr-server] WebSocket error from ${clientId}:`, err.message);
-    wispr.stop();
-    pcmStream.destroy();
-  });
-
-  try {
-    wispr.start();
-  } catch (err) {
-    console.error('[my-wispr-server] Failed to start wispr:', err.message);
-    ws.send(JSON.stringify({ type: 'error', message: err.message }));
-    ws.close();
+wispr.on('transcription', (text) => {
+  if (process.env.LOG_TRANSCRIPTS !== 'false') {
+    console.log(`[Transcription] ${text}`);
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`[my-wispr-server] WebSocket transcription server running on ws://localhost:${PORT}`);
-  console.log(`[my-wispr-server] Health check: http://localhost:${PORT}/health`);
-  console.log('[my-wispr-server] Waiting for browser connections...');
+wispr.on('error', (err) => {
+  console.error('[Wispr Error]', err.message);
 });
+
+wispr.on('start', () => {
+  console.log('[my-wispr-server] Transcription started.');
+});
+
+// Start capture and transcription
+console.log('[my-wispr-server] Listening to microphone... Speak now!');
+pcmStream.start();
+
+try {
+  wispr.start();
+} catch (err) {
+  console.error('[my-wispr-server] Failed to start wispr:', err.message);
+  process.exit(1);
+}
 
 process.on('SIGINT', () => {
   console.log('\n[my-wispr-server] Shutting down...');
-  wss.close(() => {
-    server.close(() => {
-      process.exit(0);
-    });
-  });
+  try {
+    wispr.stop();
+    pcmStream.quit();
+  } catch (_) {}
+  process.exit(0);
 });
