@@ -1,16 +1,27 @@
 {
-  "name": "my-wispr-npm",
-  "version": "1.0.0",
-  "description": "",
+  "name": "my-wispr-server",
+  "version": "0.2.0",
+  "description": "WebSocket transcription server for my-wispr — receives browser PCM audio, runs whisper.cpp server-side, streams text back.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "speech-to-text",
+    "websocket",
+    "transcription",
+    "whisper",
+    "server"
+  ],
+  "author": "sainideep1234",
+  "license": "MIT",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
-    "naudiodon2p": "^2.6.0"
+    "my-wispr-npm": "file:../packages/core",
+    "ws": "^8.21.0"
   }
 }

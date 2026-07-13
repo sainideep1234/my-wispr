@@ -1,14 +1,14 @@
 {
   "name": "my-wispr-npm",
-  "version": "0.1.3",
-  "description": "Offline voice-to-text for Node.js — wraps whisper.cpp + PortAudio into a single EventEmitter-based API. No cloud, no API key.",
+  "version": "0.2.0",
+  "description": "Server-side real-time speech-to-text for Node.js — pipe any PCM stream (e.g. from a WebSocket) into whisper.cpp. Powers the Web SaaS pattern: browser mic → WebSocket → your server → instant transcription.",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
-    "test": "node -e \"const { createWispr } = require('.'); console.log('OK — createWispr is', typeof createWispr);\""
+    "test": "node -e \"const { createWisprStream } = require('.'); console.log('OK — createWisprStream is', typeof createWisprStream);\""
   },
   "keywords": [
     "speech-to-text",
@@ -18,12 +18,13 @@
     "whisper.cpp",
     "offline",
     "transcription",
-    "microphone",
-    "portaudio",
-    "naudiodon",
-    "privacy",
+    "websocket",
+    "streaming",
+    "server-side",
+    "saas",
     "real-time",
-    "nodejs"
+    "nodejs",
+    "privacy"
   ],
   "author": "sainideep1234",
   "license": "MIT",
@@ -39,9 +40,7 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": {
-    "naudiodon2p": "^2.6.0"
-  },
+  "dependencies": {},
   "files": [
     "src/",
     "scripts/",

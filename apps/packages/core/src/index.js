@@ -1,7 +1,7 @@
 'use strict';
 
 const EventEmitter = require('events');
-const portAudio = require('naudiodon2p');
+const { PassThrough } = require('stream');
 const { spawn } = require('child_process');
 const { existsSync } = require('fs');
 const { join } = require('path');
@@ -14,127 +14,139 @@ const CHUNK_MS = 20;
 
 const BYTES_PER_CHUNK = (SAMPLE_RATE * NUM_CHANNELS * BYTES_PER_SAMPLE * CHUNK_MS) / 1000;
 
-function createWispr(opts = {}) {
-  const deviceId = opts.deviceId !== undefined ? opts.deviceId : -1;
-  const windowChunks = opts.windowChunks !== undefined ? opts.windowChunks : 150;
-  const stepChunks = opts.stepChunks !== undefined ? opts.stepChunks : 75;
-  const whisperBin = opts.whisperBin;
-  const modelPath = opts.modelPath;
-  const model = opts.model || 'base.en';
-  const onTranscription = opts.onTranscription;
-  const onError = opts.onError;
+function buildWavHeader(pcmLength) {
+  const buffer = Buffer.alloc(44);
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + pcmLength, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(NUM_CHANNELS, 22);
+  buffer.writeUInt32LE(SAMPLE_RATE, 24);
+  buffer.writeUInt32LE(SAMPLE_RATE * NUM_CHANNELS * BYTES_PER_SAMPLE, 28);
+  buffer.writeUInt16LE(NUM_CHANNELS * BYTES_PER_SAMPLE, 32);
+  buffer.writeUInt16LE(BITS_PER_SAMPLE, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(pcmLength, 40);
+  return buffer;
+}
 
-  if (windowChunks < 1) {
-    throw new RangeError('windowChunks must be >= 1');
+function resolveWhisperPaths(opts) {
+  const model = opts.model || 'base.en';
+  const __pkgDir = join(__dirname, '..');
+
+  const resolvedBin =
+    opts.whisperBin || process.env.WISPR_BIN || join(__pkgDir, 'whisper.cpp', 'main');
+
+  const resolvedModel =
+    opts.modelPath ||
+    process.env.WISPR_MODEL ||
+    join(__pkgDir, 'whisper.cpp', 'models', 'ggml-' + model + '.bin');
+
+  return { resolvedBin, resolvedModel };
+}
+
+function runWhisperProcess(chunks, resolvedBin, resolvedModel) {
+  return new Promise((resolve) => {
+    const pcmData = Buffer.concat(chunks);
+    const wavHeader = buildWavHeader(pcmData.length);
+    const fullWavData = Buffer.concat([wavHeader, pcmData]);
+
+    const proc = spawn(resolvedBin, ['-m', resolvedModel, '-f', '-', '-nt'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on('close', (code) => {
+      const text = stdout.trim();
+      if (code !== 0 && stderr) {
+        process.stderr.write('[wispr-core whisper stderr] ' + stderr.slice(0, 300) + '\n');
+      }
+      if (text && !text.includes('[BLANK_AUDIO]')) {
+        resolve(text);
+      } else {
+        resolve(null);
+      }
+    });
+
+    proc.on('error', (err) => {
+      process.stderr.write('[wispr-core spawn error] ' + err.message + '\n');
+      resolve(null);
+    });
+
+    proc.stdin.write(fullWavData, (writeErr) => {
+      if (writeErr) {
+        process.stderr.write('[wispr-core stdin] ' + writeErr.message + '\n');
+      }
+      proc.stdin.end();
+    });
+  });
+}
+
+/**
+ * createWisprStream — primary API for Web SaaS (server-side) usage.
+ *
+ * Accepts a Node.js Readable stream of raw 16-bit LE mono PCM at 16 kHz.
+ * Typical source: a WebSocket connection receiving browser microphone data.
+ *
+ * @param {object} opts
+ * @param {import('stream').Readable} opts.stream  — PCM audio source (required)
+ * @param {string}  [opts.model]        — whisper model name, e.g. 'base.en'
+ * @param {number}  [opts.windowChunks] — transcription window size in 20ms chunks (default 2 = 40ms)
+ * @param {number}  [opts.stepChunks]   — slide step in 20ms chunks (default 1 = 20ms overlap)
+ * @param {string}  [opts.whisperBin]   — override path to whisper.cpp binary
+ * @param {string}  [opts.modelPath]    — override path to .bin model file
+ * @param {function} [opts.onTranscription] — shorthand event handler
+ * @param {function} [opts.onError]         — shorthand event handler
+ */
+function createWisprStream(opts = {}) {
+  if (!opts.stream) {
+    throw new TypeError('[wispr-core] opts.stream is required — pass a Node.js Readable of raw PCM');
   }
-  if (stepChunks < 1) {
-    throw new RangeError('stepChunks must be >= 1');
-  }
-  if (stepChunks > windowChunks) {
-    throw new RangeError('stepChunks must be <= windowChunks');
-  }
+
+  const inputStream = opts.stream;
+  const windowChunks = opts.windowChunks !== undefined ? opts.windowChunks : 2;
+  const stepChunks = opts.stepChunks !== undefined ? opts.stepChunks : 1;
+
+  if (windowChunks < 1) throw new Error('windowChunks must be >= 1');
+  if (stepChunks < 1) throw new Error('stepChunks must be >= 1');
+  if (stepChunks > windowChunks) throw new Error('stepChunks must be <= windowChunks');
 
   const emitter = new EventEmitter();
 
-  if (typeof onTranscription === 'function') {
-    emitter.on('transcription', onTranscription);
-  }
-  if (typeof onError === 'function') {
-    emitter.on('error', onError);
-  }
+  if (typeof opts.onTranscription === 'function') emitter.on('transcription', opts.onTranscription);
+  if (typeof opts.onError === 'function') emitter.on('error', opts.onError);
 
   const chunkQueue = [];
   let isProcessing = false;
-  let audioStream = null;
-  let resolvedBin = '';
-  let resolvedModel = '';
-
-  function buildWavHeader(pcmLength) {
-    const buffer = Buffer.alloc(44);
-    buffer.write('RIFF', 0);
-    buffer.writeUInt32LE(36 + pcmLength, 4);
-    buffer.write('WAVE', 8);
-    buffer.write('fmt ', 12);
-    buffer.writeUInt32LE(16, 16);
-    buffer.writeUInt16LE(1, 20);
-    buffer.writeUInt16LE(NUM_CHANNELS, 22);
-    buffer.writeUInt32LE(SAMPLE_RATE, 24);
-    buffer.writeUInt32LE(SAMPLE_RATE * NUM_CHANNELS * BYTES_PER_SAMPLE, 28);
-    buffer.writeUInt16LE(NUM_CHANNELS * BYTES_PER_SAMPLE, 32);
-    buffer.writeUInt16LE(BITS_PER_SAMPLE, 34);
-    buffer.write('data', 36);
-    buffer.writeUInt32LE(pcmLength, 40);
-    return buffer;
-  }
-
-  function runWhisperProcess(chunks) {
-    return new Promise((resolve) => {
-      const pcmData = Buffer.concat(chunks);
-      const wavHeader = buildWavHeader(pcmData.length);
-      const fullWavData = Buffer.concat([wavHeader, pcmData]);
-
-      const process = spawn(resolvedBin, ['-m', resolvedModel, '-f', '-', '-nt'], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      process.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      process.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      process.on('close', (code) => {
-        const text = stdout.trim();
-        if (code !== 0 && stderr) {
-          process.stderr.write('[wispr-core whisper stderr] ' + stderr.slice(0, 300) + '\n');
-        }
-        if (text && !text.includes('[BLANK_AUDIO]')) {
-          resolve(text);
-        } else {
-          resolve(null);
-        }
-      });
-
-      process.on('error', (err) => {
-        process.stderr.write('[wispr-core spawn error] ' + err.message + '\n');
-        resolve(null);
-      });
-
-      process.stdin.write(fullWavData, (writeErr) => {
-        if (writeErr) {
-          process.stderr.write('[wispr-core stdin] ' + writeErr.message + '\n');
-        }
-        process.stdin.end();
-      });
-    });
-  }
+  let started = false;
+  let { resolvedBin, resolvedModel } = resolveWhisperPaths(opts);
 
   async function processQueue() {
-    if (isProcessing) {
-      return;
-    }
-    if (chunkQueue.length < windowChunks) {
-      return;
-    }
+    if (isProcessing) return;
+    if (chunkQueue.length < windowChunks) return;
 
     isProcessing = true;
 
     try {
       while (chunkQueue.length >= windowChunks) {
         const window = chunkQueue.slice(0, windowChunks);
-
-        const text = await runWhisperProcess(window);
+        const text = await runWhisperProcess(window, resolvedBin, resolvedModel);
         if (text) {
           emitter.emit('transcription', text);
         }
-
         chunkQueue.splice(0, stepChunks);
-
         await new Promise((r) => setImmediate(r));
       }
     } catch (err) {
@@ -145,122 +157,74 @@ function createWispr(opts = {}) {
   }
 
   function start() {
-    if (audioStream) {
-      throw new Error('[wispr-core] Already running. Call stop() first.');
-    }
-
-    const possibleBins = [
-      join(__dirname, '..', 'whisper.cpp', 'main'),
-      join(__dirname, '..', '..', '..', 'whisper.cpp', 'main'),
-      join(__dirname, '..', '..', 'whisper.cpp', 'main'),
-    ];
-    if (whisperBin) {
-      resolvedBin = whisperBin;
-    } else if (process.env.WISPR_BIN) {
-      resolvedBin = process.env.WISPR_BIN;
-    } else {
-      for (const p of possibleBins) {
-        if (existsSync(p)) {
-          resolvedBin = p;
-          break;
-        }
-      }
-      if (!resolvedBin) {
-        resolvedBin = possibleBins[0];
-      }
-    }
-
-    const possibleModels = [
-      join(__dirname, '..', 'whisper.cpp', 'models', 'ggml-' + model + '.bin'),
-      join(__dirname, '..', '..', '..', 'whisper.cpp', 'models', 'ggml-' + model + '.bin'),
-      join(__dirname, '..', '..', 'whisper.cpp', 'models', 'ggml-' + model + '.bin'),
-    ];
-    if (modelPath) {
-      resolvedModel = modelPath;
-    } else if (process.env.WISPR_MODEL) {
-      resolvedModel = process.env.WISPR_MODEL;
-    } else {
-      for (const p of possibleModels) {
-        if (existsSync(p)) {
-          resolvedModel = p;
-          break;
-        }
-      }
-      if (!resolvedModel) {
-        resolvedModel = possibleModels[0];
-      }
-    }
+    if (started) throw new Error('[wispr-core] Already started. Call stop() first.');
 
     if (!existsSync(resolvedBin)) {
       throw new Error(
         '[wispr-core] whisper binary not found at: ' +
-          resolvedBin +
-          '\n' +
-          '  Run: npm explore wispr-core -- npm run setup\n' +
-          '  Or set WISPR_BIN=/path/to/whisper-cli',
+        resolvedBin +
+        '\n  Run: npm explore my-wispr-npm -- npm run setup' +
+        '\n  Or set WISPR_BIN=/path/to/whisper-cli',
       );
     }
 
     if (!existsSync(resolvedModel)) {
       throw new Error(
         '[wispr-core] whisper model not found at: ' +
-          resolvedModel +
-          '\n' +
-          '  Run: npm explore wispr-core -- npm run setup\n' +
-          '  Or set WISPR_MODEL=/path/to/ggml-base.en.bin',
+        resolvedModel +
+        '\n  Run: npm explore my-wispr-npm -- npm run setup' +
+        '\n  Or set WISPR_MODEL=/path/to/ggml-base.en.bin',
       );
     }
 
-    audioStream = new portAudio.AudioIO({
-      inOptions: {
-        channelCount: NUM_CHANNELS,
-        sampleFormat: portAudio.SampleFormat16Bit,
-        sampleRate: SAMPLE_RATE,
-        deviceId: deviceId,
-        closeOnError: true,
-      },
-    });
+    started = true;
+    let leftover = Buffer.alloc(0);
 
-    audioStream.on('data', (rawBuffer) => {
+    inputStream.on('data', (rawBuffer) => {
+      const combined = Buffer.concat([leftover, rawBuffer]);
       let offset = 0;
-      while (offset < rawBuffer.length) {
-        const end = Math.min(offset + BYTES_PER_CHUNK, rawBuffer.length);
-        chunkQueue.push(rawBuffer.slice(offset, end));
-        offset = end;
+
+      while (offset + BYTES_PER_CHUNK <= combined.length) {
+        chunkQueue.push(combined.slice(offset, offset + BYTES_PER_CHUNK));
+        offset += BYTES_PER_CHUNK;
       }
+
+      leftover = combined.slice(offset);
       processQueue();
     });
 
-    audioStream.on('error', (err) => {
+    inputStream.on('error', (err) => {
       emitter.emit('error', err);
     });
 
-    audioStream.start();
+    inputStream.on('end', () => {
+      started = false;
+      emitter.emit('stop');
+    });
+
     emitter.emit('start');
   }
 
   function stop() {
-    if (!audioStream) {
-      return;
-    }
-
-    try {
-      audioStream.quit();
-    } catch (err) {}
-
-    audioStream = null;
+    if (!started) return;
+    started = false;
     chunkQueue.length = 0;
     isProcessing = false;
+
+    try {
+      if (typeof inputStream.destroy === 'function') inputStream.destroy();
+    } catch (_) { }
+
     emitter.emit('stop');
   }
 
   return {
-    start: start,
-    stop: stop,
+    start,
+    stop,
     on: emitter.on.bind(emitter),
     off: emitter.off.bind(emitter),
     once: emitter.once.bind(emitter),
   };
 }
 
-module.exports = { createWispr };
+module.exports = { createWisprStream };
