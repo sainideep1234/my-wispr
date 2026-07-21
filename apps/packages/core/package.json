@@ -1,15 +1,20 @@
 {
   "name": "my-wispr-npm",
-  "version": "0.2.0",
-  "description": "Server-side real-time speech-to-text for Node.js — pipe any PCM stream (e.g. from a WebSocket) into whisper.cpp. Powers the Web SaaS pattern: browser mic → WebSocket → your server → instant transcription.",
+  "version": "0.3.0",
+  "description": "Offline speech-to-text for Node.js — pipe any PCM stream into whisper.cpp. Same core for WebSocket SaaS, desktop apps, and VS Code extensions.",
   "main": "src/index.js",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./server": "./src/server.js"
+  },
+  "bin": {
+    "my-wispr-setup": "scripts/setup.js"
   },
   "type": "module",
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
-    "test": "node -e \"import('./src/index.js').then(({ createWisprStream }) => console.log('OK — createWisprStream is', typeof createWisprStream));\""
+    "setup": "node scripts/setup.js",
+    "test": "node -e \"import('./src/index.js').then(({ createWisprStream }) => console.log('OK — createWisprStream is', typeof createWisprStream)); import('./src/server.js').then(({ createWisprServer }) => console.log('OK — createWisprServer is', typeof createWisprServer));\""
   },
   "keywords": [
     "speech-to-text",
@@ -22,6 +27,8 @@
     "websocket",
     "streaming",
     "server-side",
+    "desktop",
+    "vscode",
     "saas",
     "real-time",
     "nodejs",
@@ -40,6 +47,14 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "ws": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ws": {
+      "optional": true
+    }
   },
   "dependencies": {},
   "files": [

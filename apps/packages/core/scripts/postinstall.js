@@ -1,56 +1,7 @@
-import { execSync } from 'child_process';
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const whisperDirMonorepo = join(__dirname, '..', '..', '..', '..', 'packages', 'whisper.cpp');
-const whisperDirStandalone = join(__dirname, '..', 'whisper.cpp');
-
-let whisperDir = whisperDirStandalone;
-if (existsSync(whisperDirMonorepo)) {
-  whisperDir = whisperDirMonorepo;
-}
-
-const binaryPath = join(whisperDir, 'main');
-const modelPath = join(whisperDir, 'models', 'ggml-base.en.bin');
-
-console.log('[wispr-core] Starting automatic whisper.cpp setup...');
-
-try {
-  if (!existsSync(whisperDir)) {
-    console.log('[wispr-core] Cloning whisper.cpp repository (this may take a moment)...');
-    execSync(`git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git "${whisperDir}"`, {
-      stdio: 'inherit',
-    });
-  } else {
-    console.log('[wispr-core] whisper.cpp directory found at: ' + whisperDir);
-  }
-
-  if (!existsSync(binaryPath)) {
-    console.log('[wispr-core] Compiling whisper.cpp binary with make (this may take 1-2 minutes)...');
-    execSync('make', {
-      cwd: whisperDir,
-      stdio: 'inherit',
-    });
-  } else {
-    console.log('[wispr-core] whisper.cpp binary is already compiled.');
-  }
-
-  if (!existsSync(modelPath)) {
-    console.log('[wispr-core] Downloading ggml-base.en.bin model (~150MB)...');
-    execSync('bash models/download-ggml-model.sh base.en', {
-      cwd: whisperDir,
-      stdio: 'inherit',
-    });
-  } else {
-    console.log('[wispr-core] ggml-base.en.bin model is already downloaded.');
-  }
-
-  console.log('[wispr-core] Automatic setup completed successfully!');
-} catch (error) {
-  console.error('[wispr-core] Automatic setup failed:', error.message);
-  console.error('[wispr-core] Please try compiling manually inside:', whisperDir);
-}
+#!/usr/bin/env node
+/**
+ * Lightweight postinstall notice — does NOT clone or compile.
+ * Run setup explicitly: npx my-wispr-setup
+ */
+console.log('[my-wispr] Installed. Next: npx my-wispr-setup  (clones/builds whisper.cpp + model)');
+console.log('[my-wispr] Or set WISPR_BIN / WISPR_MODEL if you already have them.');

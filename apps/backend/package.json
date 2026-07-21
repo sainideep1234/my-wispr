@@ -1,19 +1,22 @@
 {
   "name": "my-wispr-server",
-  "version": "0.2.0",
-  "description": "WebSocket transcription server for my-wispr — receives browser PCM audio, runs whisper.cpp server-side, streams text back.",
+  "version": "0.3.0",
+  "description": "Demo hosts for my-wispr-npm — WebSocket SaaS server and local-mic desktop capture.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "start:desktop": "node desktop.js",
     "predev": "node scripts/setup.js",
-    "dev": "node --watch --env-file=.env index.js"
+    "dev": "node --watch --env-file=.env index.js",
+    "dev:desktop": "node --watch --env-file=.env desktop.js"
   },
   "keywords": [
     "speech-to-text",
     "websocket",
     "transcription",
     "whisper",
-    "server"
+    "server",
+    "desktop"
   ],
   "author": "sainideep1234",
   "license": "MIT",

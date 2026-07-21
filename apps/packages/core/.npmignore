@@ -1,5 +1,7 @@
 # Don't publish these to npm
 node_modules/
+whisper.cpp/
 *.log
 .DS_Store
 .env
+*.bin

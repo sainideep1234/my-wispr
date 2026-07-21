@@ -1,5 +1,4 @@
 import EventEmitter from 'events';
-import { PassThrough } from 'stream';
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
@@ -36,11 +35,11 @@ function buildWavHeader(pcmLength) {
 
 function resolveWhisperPaths(opts) {
   const model = opts.model || 'base.en';
-  const __pkgDir = join(__dirname, '..');
+  const pkgDir = join(__dirname, '..');
 
-  // Check if monorepo shared folder packages/whisper.cpp exists
-  const monorepoRootWhisper = join(__pkgDir, '..', '..', '..', 'packages', 'whisper.cpp');
-  let whisperDir = join(__pkgDir, 'whisper.cpp');
+  // Prefer monorepo shared whisper.cpp when developing inside this repo
+  const monorepoRootWhisper = join(pkgDir, '..', '..', '..', 'packages', 'whisper.cpp');
+  let whisperDir = join(pkgDir, 'whisper.cpp');
   if (existsSync(monorepoRootWhisper)) {
     whisperDir = monorepoRootWhisper;
   }
@@ -53,7 +52,7 @@ function resolveWhisperPaths(opts) {
     process.env.WISPR_MODEL ||
     join(whisperDir, 'models', 'ggml-' + model + '.bin');
 
-  return { resolvedBin, resolvedModel };
+  return { resolvedBin, resolvedModel, whisperDir };
 }
 
 function runWhisperProcess(chunks, resolvedBin, resolvedModel) {
@@ -104,16 +103,17 @@ function runWhisperProcess(chunks, resolvedBin, resolvedModel) {
 }
 
 /**
- * createWisprStream — primary API for Web SaaS (server-side) usage.
+ * createWisprStream — core transcription engine.
  *
- * Accepts a Node.js Readable stream of raw 16-bit LE mono PCM at 16 kHz.
- * Typical source: a WebSocket connection receiving browser microphone data.
+ * Accepts any Node.js Readable of raw 16-bit LE mono PCM at 16 kHz.
+ * Wire it from a WebSocket PassThrough, a local mic stream, a VS Code
+ * extension host buffer, etc. — the core does not know or care.
  *
  * @param {object} opts
  * @param {import('stream').Readable} opts.stream  — PCM audio source (required)
  * @param {string}  [opts.model]        — whisper model name, e.g. 'base.en'
- * @param {number}  [opts.windowChunks] — transcription window size in 20ms chunks (default 2 = 40ms)
- * @param {number}  [opts.stepChunks]   — slide step in 20ms chunks (default 1 = 20ms overlap)
+ * @param {number}  [opts.windowChunks] — window size in 20ms chunks (default 2)
+ * @param {number}  [opts.stepChunks]   — slide step in 20ms chunks (default 1)
  * @param {string}  [opts.whisperBin]   — override path to whisper.cpp binary
  * @param {string}  [opts.modelPath]    — override path to .bin model file
  * @param {function} [opts.onTranscription] — shorthand event handler
@@ -140,7 +140,7 @@ function createWisprStream(opts = {}) {
   const chunkQueue = [];
   let isProcessing = false;
   let started = false;
-  let { resolvedBin, resolvedModel } = resolveWhisperPaths(opts);
+  const { resolvedBin, resolvedModel } = resolveWhisperPaths(opts);
 
   async function processQueue() {
     if (isProcessing) return;
@@ -171,18 +171,18 @@ function createWisprStream(opts = {}) {
     if (!existsSync(resolvedBin)) {
       throw new Error(
         '[wispr-core] whisper binary not found at: ' +
-        resolvedBin +
-        '\n  Run: npm explore my-wispr-npm -- npm run setup' +
-        '\n  Or set WISPR_BIN=/path/to/whisper-cli',
+          resolvedBin +
+          '\n  Run: npx my-wispr-setup' +
+          '\n  Or set WISPR_BIN=/path/to/whisper-cli',
       );
     }
 
     if (!existsSync(resolvedModel)) {
       throw new Error(
         '[wispr-core] whisper model not found at: ' +
-        resolvedModel +
-        '\n  Run: npm explore my-wispr-npm -- npm run setup' +
-        '\n  Or set WISPR_MODEL=/path/to/ggml-base.en.bin',
+          resolvedModel +
+          '\n  Run: npx my-wispr-setup' +
+          '\n  Or set WISPR_MODEL=/path/to/ggml-base.en.bin',
       );
     }
 
@@ -222,7 +222,7 @@ function createWisprStream(opts = {}) {
 
     try {
       if (typeof inputStream.destroy === 'function') inputStream.destroy();
-    } catch (_) { }
+    } catch (_) {}
 
     emitter.emit('stop');
   }
@@ -236,4 +236,4 @@ function createWisprStream(opts = {}) {
   };
 }
 
-export { createWisprStream };
+export { createWisprStream, resolveWhisperPaths };
